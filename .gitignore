@@ -1,0 +1,17 @@
+# Data
+PetImages/
+kagglecatsanddogs_*.zip
+readme*.txt
+CDLA-Permissive-*.pdf
+
+# Trained models & checkpoints
+*.keras
+*.h5
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Environment
+.venv/
+env/
