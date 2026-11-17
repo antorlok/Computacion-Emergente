@@ -1,7 +1,11 @@
 """
 Script de inferencia / predicción para el clasificador de Cats vs Dogs.
+Computación Emergente - UJAP
+
 Uso:
-    python predict.py --image ruta/a/tu_imagen.jpg [--model final_model.keras]
+    python predict.py --image ruta/a/tu_imagen.jpg
+    python predict.py --dir ruta/a/carpeta/
+    python predict.py --image test.jpg --model best_model.keras
 """
 
 import argparse
@@ -12,48 +16,116 @@ os.environ.setdefault("KERAS_BACKEND", "tensorflow")
 import keras
 
 
-def predict_image(image_path, model_path="final_model.keras", image_size=(180, 180)):
-    if not os.path.exists(model_path):
-        # Buscar el checkpoint más reciente si no existe final_model.keras
-        checkpoints = [f for f in os.listdir(".") if f.startswith("save_at_") and f.endswith(".keras")]
-        if checkpoints:
-            checkpoints.sort()
-            model_path = checkpoints[-1]
-            print(f"Usando checkpoint disponible: {model_path}")
-        else:
-            print(f"Error: No se encontró el modelo '{model_path}'. Asegúrate de entrenarlo primero con train.py.")
-            sys.exit(1)
+def find_default_model():
+    """Busca el mejor modelo disponible en orden de prioridad."""
+    candidates = ["best_model.keras", "final_model.keras"]
+    for cand in candidates:
+        if os.path.exists(cand):
+            return cand
 
-    if not os.path.exists(image_path):
-        print(f"Error: La imagen '{image_path}' no existe.")
+    # Checkpoints save_at_*.keras
+    checkpoints = [f for f in os.listdir(".") if f.startswith("save_at_") and f.endswith(".keras")]
+    if checkpoints:
+        checkpoints.sort()
+        return checkpoints[-1]
+
+    return None
+
+
+def classify_single_image(model, image_path, image_size=(180, 180)):
+    """Ejecuta inferencia sobre una sola imagen y retorna (cat_prob, dog_prob, label)."""
+    try:
+        img = keras.utils.load_img(image_path, target_size=image_size)
+    except Exception as e:
+        print(f"Error al abrir la imagen '{image_path}': {e}")
+        return None
+
+    img_array = keras.utils.img_to_array(img)
+    img_array = keras.ops.expand_dims(img_array, 0)
+
+    predictions = model.predict(img_array, verbose=0)
+    score = float(keras.ops.sigmoid(predictions[0][0]))
+
+    cat_prob = (1 - score) * 100
+    dog_prob = score * 100
+    label = "PERRO" if dog_prob > cat_prob else "GATO"
+
+    return cat_prob, dog_prob, label
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Predecir si una imagen o lote de imágenes contiene un gato o un perro")
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--image", type=str, help="Ruta de una imagen individual para clasificar")
+    group.add_argument("--dir", type=str, help="Ruta de un directorio con imágenes para clasificar por lote")
+    parser.add_argument("--model", type=str, default=None, help="Ruta al modelo .keras guardado (por defecto busca best_model.keras)")
+    args = parser.parse_args()
+
+    model_path = args.model or find_default_model()
+    if not model_path or not os.path.exists(model_path):
+        print("Error: No se encontró un modelo entrenado (.keras).")
+        print("Ejecuta 'python train.py' primero para entrenar y generar 'best_model.keras'.")
         sys.exit(1)
 
     print(f"Cargando modelo desde '{model_path}'...")
     model = keras.models.load_model(model_path)
 
-    print(f"Procesando imagen '{image_path}'...")
-    img = keras.utils.load_img(image_path, target_size=image_size)
-    img_array = keras.utils.img_to_array(img)
-    img_array = keras.ops.expand_dims(img_array, 0)  # Crear batch dimension
+    image_extensions = (".jpg", ".jpeg", ".png", ".bmp", ".webp")
 
-    predictions = model.predict(img_array)
-    score = float(keras.ops.sigmoid(predictions[0][0]))
+    if args.image:
+        if not os.path.exists(args.image):
+            print(f"Error: La imagen '{args.image}' no existe.")
+            sys.exit(1)
 
-    cat_prob = (1 - score) * 100
-    dog_prob = score * 100
+        result = classify_single_image(model, args.image)
+        if result is None:
+            sys.exit(1)
+        cat_prob, dog_prob, label = result
 
-    print("\n" + "=" * 40)
-    print(f"Predicción para: {image_path}")
-    print(f"  Gato:  {cat_prob:.2f}%")
-    print(f"  Perro: {dog_prob:.2f}%")
-    print(f"Resultado final: {'PERRO' if dog_prob > cat_prob else 'GATO'}")
-    print("=" * 40)
+        print("\n" + "=" * 45)
+        print(f"Imagen:      {args.image}")
+        print(f"Predicción:  {label}")
+        print(f"Prob. Gato:  {cat_prob:.2f}%")
+        print(f"Prob. Perro: {dog_prob:.2f}%")
+        print("=" * 45)
+
+    elif args.dir:
+        if not os.path.isdir(args.dir):
+            print(f"Error: El directorio '{args.dir}' no existe.")
+            sys.exit(1)
+
+        files = [
+            os.path.join(args.dir, f)
+            for f in sorted(os.listdir(args.dir))
+            if f.lower().endswith(image_extensions)
+        ]
+
+        if not files:
+            print(f"No se encontraron imágenes válidas en '{args.dir}'.")
+            sys.exit(0)
+
+        print(f"\nClasificando {len(files)} imágenes en '{args.dir}':\n")
+        print(f"{'Archivo':<35} | {'Clase':<7} | {'Confianza':<9}")
+        print("-" * 57)
+
+        cat_count = 0
+        dog_count = 0
+
+        for fpath in files:
+            fname = os.path.basename(fpath)
+            res = classify_single_image(model, fpath)
+            if res:
+                cat_p, dog_p, lbl = res
+                conf = max(cat_p, dog_p)
+                if lbl == "PERRO":
+                    dog_count += 1
+                else:
+                    cat_count += 1
+                print(f"{fname[:33]:<35} | {lbl:<7} | {conf:6.2f}%")
+
+        print("-" * 57)
+        print(f"Resumen: {cat_count} Gatos, {dog_count} Perros (Total: {len(files)})\n")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Predecir si una imagen es de un gato o un perro")
-    parser.add_argument("--image", type=str, required=True, help="Ruta de la imagen a clasificar")
-    parser.add_argument("--model", type=str, default="final_model.keras", help="Ruta al modelo .keras guardado")
-    args = parser.parse_args()
-
-    predict_image(args.image, args.model)
+    main()
