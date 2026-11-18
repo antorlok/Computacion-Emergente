@@ -60,6 +60,7 @@ def main():
     group.add_argument("--image", type=str, help="Ruta de una imagen individual para clasificar")
     group.add_argument("--dir", type=str, help="Ruta de un directorio con imágenes para clasificar por lote")
     parser.add_argument("--model", type=str, default=None, help="Ruta al modelo .keras guardado (por defecto busca best_model.keras)")
+    parser.add_argument("--gradcam", action="store_true", help="Generar mapa de calor visual con Grad-CAM para la imagen")
     args = parser.parse_args()
 
     model_path = args.model or find_default_model()
@@ -89,6 +90,13 @@ def main():
         print(f"Prob. Gato:  {cat_prob:.2f}%")
         print(f"Prob. Perro: {dog_prob:.2f}%")
         print("=" * 45)
+
+        if args.gradcam:
+            try:
+                from gradcam import explain_image
+                explain_image(model, args.image)
+            except Exception as e:
+                print(f"[Grad-CAM] No se pudo generar la explicabilidad: {e}")
 
     elif args.dir:
         if not os.path.isdir(args.dir):

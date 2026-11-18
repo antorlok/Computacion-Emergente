@@ -112,12 +112,32 @@ python predict.py --dir "ruta/a/carpeta_con_fotos/"
 python predict.py --image "gato.jpg" --model "best_model.keras"
 ```
 
+#### Inferencia con Explicabilidad (Grad-CAM):
+```bash
+python predict.py --image "gato.jpg" --gradcam
+```
+
 ---
 
-## 📊 Salidas Gráficas de Evaluación
+### 4. Explicabilidad con Grad-CAM (Gradient-weighted Class Activation Mapping)
 
-Durante el ciclo de entrenamiento se generan automáticamente:
+Para inspeccionar qué características visuales (orejas, hocico, silueta, ojos) determinaron la decisión de la red neuronal convolucional:
 
-| Curvas de Aprendizaje (`training_history.png`) | Matriz de Confusión (`confusion_matrix.png`) |
-|:---:|:---:|
-| Evolución de pérdida, precisión, AUC y LR | Desempeño en clases Gato vs. Perro en Test Set |
+```bash
+python gradcam.py --image "ruta/a/la_imagen.jpg"
+```
+
+Opciones de `gradcam.py`:
+* `--image`: Ruta de la imagen a inspeccionar (requerido).
+* `--output`: Nombre del archivo de salida (por defecto: `gradcam_<nombre>.png`).
+* `--colormap`: Paleta de colores para el mapa de calor (`jet`, `viridis`, `inferno`).
+
+---
+
+## 📊 Salidas Gráficas de Evaluación y Explicabilidad
+
+Durante el ciclo de entrenamiento y análisis se generan automáticamente:
+
+| Curvas de Aprendizaje (`training_history.png`) | Matriz de Confusión (`confusion_matrix.png`) | Explicabilidad (`gradcam_*.png`) |
+|:---:|:---:|:---:|
+| Evolución de pérdida, precisión, AUC y LR | Desempeño en clases Gato vs. Perro en Test Set | Mapa de calor sobre regiones determinantes |
