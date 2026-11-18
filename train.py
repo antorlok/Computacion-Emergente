@@ -85,25 +85,35 @@ def download_and_extract_dataset(data_dir=DATA_DIR):
 
 def filter_corrupted_images(data_dir=DATA_DIR):
     """
-    Filtra y elimina imágenes corruptas o truncadas utilizando Pillow (PIL).
-    Verifica tanto la cabecera (verify) como la decodificación completa de pixeles (load).
+    Filtra y elimina imágenes corruptas, truncadas o con formato no soportado
+    utilizando tanto Pillow como decodificación nativa de TensorFlow (tf.io.decode_image).
+    Crea un marcador '.verified' para no re-escanear innecesariamente en cada ejecución.
     """
-    print("Verificando integridad de imágenes con Pillow...")
+    marker_path = os.path.join(data_dir, ".verified")
+    if os.path.exists(marker_path):
+        print(f"[OK] El dataset en '{data_dir}' ya fue verificado previamente (marcador encontrado).")
+        return
+
+    print("Verificando integridad de imágenes con Pillow y TensorFlow...")
     num_skipped = 0
     for folder_name in ("Cat", "Dog"):
         folder_path = os.path.join(data_dir, folder_name)
         if not os.path.exists(folder_path):
             continue
-        for fname in os.listdir(folder_path):
+        files = os.listdir(folder_path)
+        total_files = len(files)
+        for idx, fname in enumerate(files):
             fpath = os.path.join(folder_path, fname)
             is_corrupt = False
             try:
-                # 1. Comprobación de cabecera
+                # 1. Comprobación rápida con Pillow
                 with Image.open(fpath) as img:
                     img.verify()
-                # 2. Comprobación de decodificación completa (detecta imágenes truncadas)
-                with Image.open(fpath) as img:
-                    img.load()
+                # 2. Comprobación estricta con decodificador de TensorFlow (evita caídas en decode_image)
+                raw = tf.io.read_file(fpath)
+                decoded = tf.io.decode_image(raw, channels=3)
+                if decoded.shape[-1] != 3:
+                    is_corrupt = True
             except Exception:
                 is_corrupt = True
 
@@ -113,6 +123,16 @@ def filter_corrupted_images(data_dir=DATA_DIR):
                     os.remove(fpath)
                 except OSError:
                     pass
+
+            if (idx + 1) % 5000 == 0 or (idx + 1) == total_files:
+                print(f"  [{folder_name}] Verificadas {idx + 1}/{total_files}...")
+
+    # Guardar marcador de verificación completada
+    try:
+        with open(marker_path, "w") as f:
+            f.write("verified\n")
+    except OSError:
+        pass
 
     print(f"[OK] Verificación completada. Se eliminaron {num_skipped} imágenes corruptas o ilegibles.")
 
@@ -257,7 +277,7 @@ def plot_confusion_matrix(cm, class_names=["Gato", "Perro"], save_path="confusio
 def main():
     parser = argparse.ArgumentParser(description="Entrenamiento optimizado de clasificación Cats vs Dogs con Keras 3")
     parser.add_argument("--epochs", type=int, default=25, help="Número de épocas de entrenamiento (default: 25)")
-    parser.add_argument("--batch-size", type=int, default=128, help="Tamaño de lote (default: 128)")
+    parser.add_argument("--batch-size", type=int, default=32, help="Tamaño de lote (default: 32)")
     parser.add_argument("--skip-download", action="store_true", help="Omitir descarga y saneamiento de datos")
     parser.add_argument("--no-mixed-precision", action="store_true", help="Desactivar precisión mixta float16")
     args = parser.parse_args()

@@ -13,6 +13,7 @@ import os
 import sys
 
 os.environ.setdefault("KERAS_BACKEND", "tensorflow")
+os.environ.setdefault("KERAS_HOME", os.path.join(os.path.dirname(os.path.abspath(__file__)), ".keras_cache"))
 import keras
 
 
